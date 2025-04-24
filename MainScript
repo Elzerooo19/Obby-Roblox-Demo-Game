@@ -1,0 +1,260 @@
+-- This Game is an obby game with nearly all the possible obby structures and functions, also made with data store to save the players data and a smart anticheat system that can't be exploited making the game sequence just as the dev wants it to be. 
+-- Made with profession and easy for future development, where a builder can develop a whole long game from this demo without touching a script just naming the objects correctly and copying the parts which have a script in them.
+-- I have a mid experience in game designing and building which helped me in creating this demo, some stages in this demo are intentionally hard/challenging to show my skills in incresing the difficulty, as a dev who can make a hard game of course can make an easier version
+-- , also some features are in other scripts like the lava kill parts, slippery ice, player greeting message, etc... .
+-- The last stage is hard, if u don't wish to try it on your own or don't have the time there is a green button which will help u pass it easilly , ENJOY!!
+
+-- Services --
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+-- identifiers --
+local gates = workspace:WaitForChild("Gates")
+local buttons = workspace:WaitForChild("Buttons")
+local checkpoints = workspace:WaitForChild("Checkpoints")
+local coinsParts = workspace:WaitForChild("Coins")
+local greetingEvent = ReplicatedStorage:WaitForChild("GreetingPlayerEvent")
+local winnerEvent = ReplicatedStorage:WaitForChild("WinnerEvent")
+local MovingPlates = workspace:WaitForChild("MovingPlates") 
+local HelpPart = workspace:WaitForChild("HelpPart")
+
+-- DataStore structure --
+local DatastoreService = game:GetService("DataStoreService")
+local Data = DatastoreService:GetDataStore("1")
+local sessionData = {}
+	
+function PlayerAdded(player) 
+	local leaderstats = Instance.new("Folder") --Leaderstats creation 
+	leaderstats.Name = "leaderstats"
+
+	local stage = Instance.new("NumberValue")
+	stage.Name = "Stage"
+	stage.Parent = leaderstats
+	
+	local coins = Instance.new("NumberValue")
+	coins.Name = "Coins"
+	coins.Parent = leaderstats
+
+	local success = nil
+	local playerData = nil
+	local attempt = 1 
+	
+	
+
+	repeat 
+		success, playerData = pcall(function()  --pcall is repeated until the data loads
+			return Data:GetAsync(player.UserId) --Sync with the id because it is the only thing that can't be changed in an account 
+		end)
+
+		attempt += 1
+	
+		if not success then 
+			warn(playerData)  -- error warning 
+			task.wait(2)      -- cooldown
+		end
+
+	until success or attempt == 5 -- it repeats until it loads
+
+	if success then --if it loads then make the table with their data inside
+		print("Data loaded: "..player.Name)
+		if not playerData then -- if they have no table then their a new player so we create the table 
+			print("new player, giving default data")
+
+			playerData = {
+				["Stage"] = 1, 
+				["Coins"] = 0, 
+			}
+			
+		end
+
+		sessionData[player.UserId] = playerData     -- set the data to a table with the players id and make to make a variable
+	else
+		warn("couldnt load data: "..player.Name)
+		player:Kick("couldnt load your data, rejoin")    -- if the data couldn't load we kick them so they can try to enter and try again to avoid waiting forever 
+	end
+
+	-- setting the leaderstats values that are created to the data fetched to their ID in the session data table
+	stage.Value = sessionData[player.UserId].Stage 
+	coins.Value = sessionData[player.UserId].Coins
+	
+	-- update the table value whenever the leaderstats value changes
+	stage:GetPropertyChangedSignal("Value"):Connect(function()
+		sessionData[player.UserId].Stage = stage.Value        
+	end)
+	
+	coins:GetPropertyChangedSignal("Value"):Connect(function()
+		sessionData[player.UserId].Coins = coins.Value        
+	end)
+
+	leaderstats.Parent = player 
+
+end
+
+local function activatebutton (button , touched) -- button is the button touched , touched is a boolean added to every button which works as a debounce to avoid many touches
+
+	touched.Value = true     -- avoiding many touches
+
+	local gate = gates:FindFirstChild(button.Name)    -- Every button has a gate with the exact same name (number)
+
+	if gate then 
+		gate.CanCollide = false    -- opening the gate
+		gate.Transparency = 0.5    -- visualizing the gate opening
+		button.Material = "Marble" -- visualizing the button pressed
+		button.Transparency = 0.5  -- visualizing the button pressed
+		
+		-- can be edited and visaulized with much more details but just for the demo and application this is enough
+	end
+
+	local duration = button:FindFirstChild("Duration")  	-- making the duration an int the button to be flexible as every stage would need a different average duration to finish it 
+	task.wait(duration.value)
+
+	gate.Transparency = 0     --restoring defaults
+	gate.CanCollide = true    --restoring defaults
+	button.Material = "Neon"  --restoring defaults
+	button.Transparency = 0   --restoring defaults
+
+	touched.Value = false     -- restoring the ability to be pressed again
+end
+
+Players.PlayerAdded:Connect(function(player)   
+	PlayerAdded(player)                       -- making every player that joins the game pass by the function which creates the leaderstates
+	
+	player.CharacterAdded:Connect(function(char)   -- getting the player's char using the best method
+		
+		local hum = char:WaitForChild("Humanoid")
+		local leaderstats = player:WaitForChild("leaderstats") 
+		local stage = leaderstats:WaitForChild("Stage") 
+		local coins = leaderstats:WaitForChild("Coins")
+		
+		greetingEvent:FireClient(player , player.Name , stage.Value)
+		
+		task.wait()
+		
+		char:MoveTo(checkpoints[stage.Value].Position)         -- custom spawn in the player's stored stage position
+		
+		hum.Touched:Connect(function(hit)    --adding any touch events when the player touches anything, then the touched part will be checked to make the code more organized and all related touch checks / operations in the same place
+			
+			if hit.Parent == checkpoints then      -- Creative anticheat system to check if the player is moving with the developer's desired sequence 
+				
+				if tonumber(hit.Name) == stage.Value + 1 then  -- change the stage value only if the player is moving to the next stage
+					stage.Value += 1 
+					print(sessionData[player.UserId].Stage)
+				end
+				
+				if tonumber(hit.Name) - stage.Value > 1 then   -- if the player is not moving with the desired seqeunce he gets killed returning him to his stored stage
+					 hum.Health = 0 
+				end
+				
+			end
+			
+			if hit.Parent == coinsParts then    -- checking if the touched part is a coin 
+				coins.Value += 1 
+				hit:Destroy() 
+			end
+			
+			if hit.Name == "WinnerPart" then    -- checking if the touched part is the invisible part in the final stage (This part is just for fun)
+				hit:Destroy() 					-- to avoid many touches and showing the message many times
+				winnerEvent:FireClient(player)  -- fire event to the local GUI script which will make the text visible 
+			end
+			
+			if hit.Name == "HelpButton" then    -- Help button touch check
+				HelpPart.Transparency = 0       -- the Part is already there just not seen and can't be collided with 
+				HelpPart.CanCollide = true
+			end
+			
+		end)
+	end)
+end)
+
+for _ , button in pairs (buttons:GetChildren()) do  -- get all buttons in the folder (they all have the name of the stage they need to open so they can be used for any number of stages)
+	
+	button.Touched:connect(function(otherpart)    -- play the function when the button is touched 
+
+		local humanoid = otherpart.parent:FindFirstChild("Humanoid") 
+		local touched = button:FindFirstChild("Touched")
+
+		if humanoid and touched.value == false and touched then  -- only play the function if the button isn't touched and it's been touched by a player 
+			activatebutton(button, touched)
+		end
+
+	end)
+end
+
+
+for _ , Plate in pairs (MovingPlates:GetChildren()) do  -- getting all the plates in the Moving plates folder
+	
+	local tweeninfo = TweenInfo.new (
+		math.random(2,4),        -- variety of speeds to make it challenging  
+		Enum.EasingStyle.Sine,   
+		Enum.EasingDirection.In,
+		-1,                      -- infinite 
+		true					 -- reverse the tween after completion
+	)
+
+	if Plate.Name == "Zaxis" then -- Z-axis is the name of the parts that are required to move from the left to the right and vice versa 
+		
+	    tweenProperties = {
+			Position = Plate.Position + Vector3.new(0, 0, -51) -- Instead of manually setting a new position for each part, get the initial position of each part and adjust only the Z-axis by -51 studs    
+		}
+		
+	end	
+	
+	if Plate.Name =="Xaxis" then  -- X-axis is the name of the parts that are required to move from the front to the back and vice versa
+		
+		tweenProperties = {
+			Position = Plate.Position + Vector3.new(90, 0, 0) -- Instead of manually setting a new position for each part, get the initial position of each part and adjust only the X-axis by +90 studs    
+		}	
+	end
+	
+	local tween = TweenService:Create(Plate , tweeninfo , tweenProperties) -- creating the tween to to move the plate with its unique properties and tween info 
+	tween:Play()
+end
+
+-- function to save and sync the data 
+function PlayerLeaving(player)
+
+	if sessionData[player.UserId] then
+		local success = nil
+		local errorMsg = nil
+		local attempt = 1
+
+
+		repeat
+			success, errorMsg = pcall(function()
+				Data:SetAsync(player.UserId, sessionData[player.UserId]) --here is the same as loading data just repeat waits until the data saves
+			end)
+
+			attempt += 1
+			if not success then 
+				warn(errorMsg) -- get an error warning to know the issue 
+				task.wait(2)
+			end
+
+		until success or attempt == 5
+
+		if success then 
+			print("Data saved: "..player.Name)
+		else
+			warn("Cant save: "..player.Name)
+		end
+
+	end
+
+end
+
+Players.PlayerRemoving:Connect(PlayerLeaving)
+
+function ServerShutdown()
+	if RunService:IsStudio() then
+		return
+	end
+
+	for i, player in ipairs(Players:GetPlayers()) do
+		task.spawn(function()
+			PlayerLeaving(player)
+		end)
+	end
+end
+game:BindToClose(ServerShutdown)
