@@ -1,0 +1,3 @@
+Roblox DEMO game, a small obby made with various types of stages/obstacles to show the scripting skills, every part of the code which need explantaion is commented on, because if U are a rating the script then U already know how to script and won't need a comment to explain simple clarification, etc... 
+There are more small scripts and I can provide them if U want it .
+Let me know what U think.
